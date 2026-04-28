@@ -59,19 +59,14 @@ WORKFLOW 1 — Daily News Monitor
 WORKFLOW 2 — Weekly Digest
 ─────────────────────────────────
 ⏰ Schedule Trigger (Monday 9:00 AM)
-│
-▼
+
 📥 Notion — Fetch last 7 days data
-│
-▼
+
 ⚙️  Format & Sort by Importance
-│
-▼
+
 🤖 Groq AI — Generate executive brief
-│
-▼
+
 📧 Gmail — Send weekly digest email
----
 
 ## 🛠️ Tech Stack
 
