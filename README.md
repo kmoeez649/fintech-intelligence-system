@@ -37,7 +37,7 @@ This system does it automatically:
 
 
 WORKFLOW 1 — Daily News Monitor
-─────────────────────────────────
+
 ⏰ Schedule Trigger (8:00 AM daily)
 │
 ▼
