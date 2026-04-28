@@ -39,27 +39,23 @@ This system does it automatically:
 WORKFLOW 1 — Daily News Monitor
 
 ⏰ Schedule Trigger (8:00 AM daily)
-│
-▼
+
 📰 NewsAPI — Fetch latest news
 (15 articles, 5 target companies)
-│
-▼
+
 ⚙️  Extract & Clean Articles
-│
-▼
+
 🔍 Filter — Last 24 hours only
-│
-▼
+
 🤖 Groq AI Analysis
 • Company identification
 • Category classification
 • Importance rating
 • 2-sentence summary
-│
-▼
+
 📊 Notion Database — Auto-save
 (structured, searchable)
+
 WORKFLOW 2 — Weekly Digest
 ─────────────────────────────────
 ⏰ Schedule Trigger (Monday 9:00 AM)
