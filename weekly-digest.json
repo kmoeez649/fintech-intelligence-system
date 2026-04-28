@@ -1,0 +1,252 @@
+{
+  "name": "Weekly FinTech Intelligence Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6d477f15-b259-4de9-a201-bb00368246d7",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "34c8b89b4cb780229653dc12333870dd",
+          "mode": "id"
+        },
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Date Detected|date",
+              "condition": "past_week"
+            }
+          ]
+        },
+        "options": {
+          "sort": {
+            "sortValue": [
+              {
+                "key": "Importance|select",
+                "direction": "descending"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "16e9f943-9597-42f0-bed0-93e07936fc8e",
+      "name": "Get many database pages",
+      "credentials": {
+        "notionApi": {
+          "id": "BuTRMTQMd5dCbzwG",
+          "name": "My Notion"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      formattedData: \"No data found.\",\n      totalItems: 0,\n      highCount: 0,\n      mediumCount: 0,\n      lowCount: 0\n    }\n  }];\n}\n\nlet highItems = [];\nlet mediumItems = [];\nlet lowItems = [];\n\nfor (const item of items) {\n  // Safely get properties\n  const props = item.json?.properties || \n                item.json || {};\n  \n  // Try multiple ways to get each field\n  let title = 'No title';\n  let company = 'Unknown';\n  let category = 'News';\n  let importance = 'Low';\n  let summary = '';\n  let url = '';\n\n  // Title — try different structures\n  if (props['Name']?.title?.[0]?.text?.content) {\n    title = props['Name'].title[0].text.content;\n  } else if (props['title']?.[0]?.text?.content) {\n    title = props['title'][0].text.content;\n  } else if (item.json?.title) {\n    title = item.json.title;\n  }\n\n  // Company\n  if (props['Company']?.select?.name) {\n    company = props['Company'].select.name;\n  } else if (item.json?.company) {\n    company = item.json.company;\n  }\n\n  // Category\n  if (props['Category']?.select?.name) {\n    category = props['Category'].select.name;\n  } else if (item.json?.category) {\n    category = item.json.category;\n  }\n\n  // Importance\n  if (props['Importance']?.select?.name) {\n    importance = props['Importance'].select.name;\n  } else if (item.json?.importance) {\n    importance = item.json.importance;\n  }\n\n  // Summary\n  if (props['Summary']?.rich_text?.[0]\n      ?.text?.content) {\n    summary = props['Summary']\n              .rich_text[0].text.content;\n  } else if (item.json?.summary) {\n    summary = item.json.summary;\n  }\n\n  // URL\n  if (props['Source URL']?.url) {\n    url = props['Source URL'].url;\n  } else if (item.json?.url) {\n    url = item.json.url;\n  }\n\n  const entry = `Company: ${company}\nCategory: ${category}\nHeadline: ${title}\nAnalysis: ${summary}\nSource: ${url}\n---`;\n\n  if (importance === 'High' || \n      importance === '🔴 High') {\n    highItems.push(entry);\n  } else if (importance === 'Medium' || \n             importance === '🟡 Medium') {\n    mediumItems.push(entry);\n  } else {\n    lowItems.push(entry);\n  }\n}\n\nlet formatted = '';\n\nif (highItems.length > 0) {\n  formatted += 'HIGH IMPORTANCE:\\n\\n';\n  formatted += highItems.join('\\n') + '\\n\\n';\n}\nif (mediumItems.length > 0) {\n  formatted += 'MEDIUM IMPORTANCE:\\n\\n';\n  formatted += mediumItems.join('\\n') + '\\n\\n';\n}\nif (lowItems.length > 0) {\n  formatted += 'LOW IMPORTANCE:\\n\\n';\n  formatted += lowItems.join('\\n') + '\\n\\n';\n}\n\nif (!formatted) {\n  formatted = \"Data found but could not parse.\";\n}\n\nreturn [{\n  json: {\n    formattedData: formatted,\n    totalItems: items.length,\n    highCount: highItems.length,\n    mediumCount: mediumItems.length,\n    lowCount: lowItems.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "e2f0a43c-5b91-4c85-b389-adcf5f811ca1",
+      "name": "Format Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst data = (item.formattedData || '')\n  .replace(/[\\n\\r]/g, ' ')\n  .replace(/\"/g, \"'\")\n  .trim()\n  .substring(0, 3000);\n\nconst totalItems = item.totalItems || 0;\nconst highCount = item.highCount || 0;\n\nconst prompt = \"You are a senior FinTech intelligence analyst. Write a professional weekly executive brief based on this data. Structure it as: 1) WEEK IN REVIEW (2-3 sentences overview) 2) TOP 3 DEVELOPMENTS (most important items with why they matter) 3) MARKET IMPLICATIONS (what this means for FinTech startups) 4) WATCH LIST (what to monitor next week). Keep it under 400 words. Professional tone. Data: \" + data;\n\nreturn [{\n  json: {\n    cleanPrompt: prompt,\n    totalItems: totalItems,\n    highCount: highCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "3f8796ef-d634-4d23-95b5-c8d1a01959db",
+      "name": "Build Digest Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "JSON",
+        "body": "={\"model\":\"llama-3.3-70b-versatile\",\"max_tokens\":600,\"temperature\":0.3,\"messages\":[{\"role\":\"system\",\"content\":\"You are a senior FinTech analyst writing a weekly intelligence brief for startup founders. Be concise, insightful, and actionable.\"},{\"role\":\"user\",\"content\":\"{{ $json.cleanPrompt }}\"}]}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "33dd5559-1a80-45a0-ad1a-7a65e4f95436",
+      "name": "Generate Brief",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PKCtxzZ6gKIaVTzF",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst brief = response.choices[0]\n              .message.content || '';\n\nconst totalItems = $('Build Digest Prompt')\n                   .first().json.totalItems;\nconst highCount = $('Build Digest Prompt')\n                  .first().json.highCount;\n\nconst today = new Date();\nconst weekStr = today.toLocaleDateString(\n  'en-US', \n  { \n    month: 'long', \n    day: 'numeric', \n    year: 'numeric' \n  }\n);\n\nreturn [{\n  json: {\n    brief: brief,\n    subject: `FinTech Intelligence Brief — Week of ${weekStr}`,\n    totalItems: totalItems,\n    highCount: highCount,\n    weekStr: weekStr\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "4713aa9b-d680-4e99-8a51-776eac9e426b",
+      "name": "Extract Brief"
+    },
+    {
+      "parameters": {
+        "sendTo": "kmoeez0099@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "=<div style=\"font-family: Georgia, serif; max-width: 650px; margin: 0 auto; background: #0a0a0a; color: #d8d0c0; padding: 40px;\">  <div style=\"border-bottom: 2px solid #c9a84c; padding-bottom: 20px; margin-bottom: 30px;\">   <h1 style=\"font-size: 24px; color: #c9a84c; margin: 0; letter-spacing: 2px;\">     THE MACRO DESK   </h1>   <p style=\"color: #7a7060; font-size: 12px; margin: 5px 0 0 0; letter-spacing: 3px;\">     FINTECH INTELLIGENCE BRIEF   </p> </div>  <div style=\"background: #161616; border-left: 3px solid #c9a84c; padding: 15px 20px; margin-bottom: 25px;\">   <p style=\"margin: 0; font-size: 13px; color: #7a7060;\">     Week of {{ $json.weekStr }} &nbsp;|&nbsp;      {{ $json.totalItems }} items tracked &nbsp;|&nbsp;      {{ $json.highCount }} high priority   </p> </div>  <div style=\"line-height: 1.9; font-size: 15px; color: #d8d0c0; white-space: pre-line;\"> {{ $json.brief }} </div>  <div style=\"border-top: 1px solid #2a2a2a; margin-top: 35px; padding-top: 20px; text-align: center;\">   <p style=\"color: #7a7060; font-size: 11px; letter-spacing: 2px;\">     AUTOMATED BY FINTECH INTELLIGENCE SYSTEM   </p>   <p style=\"color: #c9a84c; font-size: 11px; letter-spacing: 1px;\"> ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "e80064c2-67dd-43a4-a6ba-cc5240caad68",
+      "name": "Send a message",
+      "webhookId": "27299f19-374d-4204-84ed-dd44de19b398",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rWX8Ro66nqtQT85q",
+          "name": "My Gmail"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many database pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many database pages": {
+      "main": [
+        [
+          {
+            "node": "Format Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data": {
+      "main": [
+        [
+          {
+            "node": "Build Digest Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Digest Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Brief": {
+      "main": [
+        [
+          {
+            "node": "Extract Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Brief": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9253f261-3129-48ee-91c6-8c59097ec521",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5d608145dbc055f8f06aaa41bc97cbce878821948844d55fbfce474033085dbd"
+  },
+  "id": "Snza1ylNpeVfMjQB",
+  "tags": []
+}

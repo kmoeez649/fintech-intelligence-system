@@ -1,0 +1,296 @@
+{
+  "name": "Daily FinTech News Intelligence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -496,
+        -192
+      ],
+      "id": "554a4be0-700f-4d15-8d5b-11d47158dec2",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=Stripe+OR+Coinbase+OR+Revolut+OR+NayaPay+OR+Wise&language=en&sortBy=publishedAt&pageSize=15&apiKey=b24d7e6c34a44036a55fae0805da4cd9",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -288,
+        -192
+      ],
+      "id": "777fabdf-d1ec-469e-bd66-f3149cd2d7ab",
+      "name": "Fetch News"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst articles = response.articles || [];\n\nreturn articles.map(article => ({\n  json: {\n    title: article.title || 'No title',\n    description: article.description || \n                 'No description',\n    url: article.url || '',\n    publishedAt: article.publishedAt || '',\n    source: article.source?.name || \n            'Unknown'\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -192
+      ],
+      "id": "bbf65e9d-24d8-4fd5-808f-3f4402e9a60b",
+      "name": "Extract Articles"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "960bb0aa-5d26-4888-a651-7fd5d658fab0",
+              "leftValue": "={{ $json.publishedAt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        128,
+        -192
+      ],
+      "id": "2f0a6dc2-792d-4b4b-8f7e-960d0f7d8beb",
+      "name": "Recent Only"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const title = (item.json.title || '')\n    .replace(/[\\n\\r\\t]/g, ' ')\n    .replace(/\"/g, \"'\")\n    .replace(/\\\\/g, '')\n    .trim()\n    .substring(0, 200);\n    \n  const description = (item.json.description || '')\n    .replace(/[\\n\\r\\t]/g, ' ')\n    .replace(/\"/g, \"'\")\n    .replace(/\\\\/g, '')\n    .trim()\n    .substring(0, 300);\n\n  return {\n    json: {\n      ...item.json,\n      cleanTitle: title,\n      cleanDescription: description\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -192
+      ],
+      "id": "64e81c56-3ff4-432a-b00f-26116b8bb342",
+      "name": "Clean Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "JSON",
+        "body": "={\"model\":\"llama-3.3-70b-versatile\",\"max_tokens\":400,\"temperature\":0.1,\"messages\":[{\"role\":\"system\",\"content\":\"You are a FinTech analyst. Respond ONLY with valid JSON object. No markdown, no explanation, just the JSON.\"},{\"role\":\"user\",\"content\":\"Analyze this FinTech news. Reply ONLY with this JSON: {\\\"company\\\": \\\"name or Unknown\\\", \\\"category\\\": \\\"Pricing or Feature or Funding or Leadership or News or Partnership\\\", \\\"importance\\\": \\\"High or Medium or Low\\\", \\\"summary\\\": \\\"2 sentences about what happened\\\"}. Title: {{ $json.cleanTitle }} Description: {{ $json.cleanDescription }}\"}]}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        544,
+        -192
+      ],
+      "id": "d9c789b2-d99f-40d8-88c5-a5b32ba8c6fb",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PKCtxzZ6gKIaVTzF",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const content = item.json.choices[0]\n                  .message.content || '';\n  \n  let parsed;\n  try {\n    const cleaned = content\n      .replace(/```json/g, '')\n      .replace(/```/g, '')\n      .trim();\n    parsed = JSON.parse(cleaned);\n  } catch(e) {\n    parsed = {\n      company: 'Unknown',\n      category: 'News',\n      importance: 'Low',\n      summary: content.substring(0, 200)\n    };\n  }\n\n  results.push({\n    json: {\n      company: parsed.company || 'Unknown',\n      category: parsed.category || 'News',\n      importance: parsed.importance || 'Low',\n      summary: parsed.summary || '',\n      title: $('Clean Data').item.json.title,\n      url: $('Clean Data').item.json.url,\n      publishedAt: $('Clean Data')\n                   .item.json.publishedAt\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -192
+      ],
+      "id": "fc3fe647-24f9-47eb-b303-2a88a86e2953",
+      "name": "Parse Response"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "34c8b89b4cb780229653dc12333870dd",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Name|title",
+              "title": "={{ $json.title }}"
+            },
+            {
+              "key": "Summary|rich_text",
+              "textContent": "={{ $json.summary }}"
+            },
+            {
+              "key": "Company|select",
+              "selectValue": "={{ $json.company }}"
+            },
+            {
+              "key": "Category|select",
+              "selectValue": "={{ $json.category }}"
+            },
+            {
+              "key": "Importance|select",
+              "selectValue": "={{ $json.importance }}"
+            },
+            {
+              "key": "Source URL|url",
+              "urlValue": "={{ $json.url }}"
+            },
+            {
+              "key": "Date Detected|date",
+              "date": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        -192
+      ],
+      "id": "d7dca050-5269-42a1-854d-1690fa00e9ae",
+      "name": "Save to Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "BuTRMTQMd5dCbzwG",
+          "name": "My Notion"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News": {
+      "main": [
+        [
+          {
+            "node": "Extract Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Articles": {
+      "main": [
+        [
+          {
+            "node": "Recent Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Only": {
+      "main": [
+        [
+          {
+            "node": "Clean Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Save to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "28fbe004-6baa-47ff-923a-cb7228951cd4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5d608145dbc055f8f06aaa41bc97cbce878821948844d55fbfce474033085dbd"
+  },
+  "id": "3goCVpEfl8JWjqcE",
+  "tags": []
+}
